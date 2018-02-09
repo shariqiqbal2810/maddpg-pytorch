@@ -1,6 +1,6 @@
 import torch
 from utils.networks import MLPNetwork
-from utils.misc import soft_update
+from utils.misc import soft_update, average_gradients
 from utils.agents import DDPGAgent
 
 MSELoss = torch.nn.MSELoss()
@@ -77,7 +77,7 @@ class MADDPG(object):
         return [a.step(obs, training=training) for a, obs in zip(self.agents,
                                                                  observations)]
 
-    def update(self, sample, agent_i):
+    def update(self, sample, agent_i, parallel=False):
         """
         Update parameters of agent model based on sample from replay buffer
         Inputs:
@@ -86,6 +86,7 @@ class MADDPG(object):
                     the replay buffer. Each is a list with entries
                     corresponding to each agent
             agent_i (int): index of agent to update
+            parallel (bool): If true, will average gradients across threads
         """
         obs, acs, rews, next_obs, dones = sample
         curr_agent = self.agents[agent_i]
@@ -109,6 +110,8 @@ class MADDPG(object):
         actual_value = curr_agent.critic(vf_in)
         vf_loss = MSELoss(actual_value, target_value.detach())
         vf_loss.backward()
+        if parallel:
+            average_gradients(curr_agent.critic)
         curr_agent.critic_optimizer.step()
 
         curr_agent.policy_optimizer.zero_grad()
@@ -120,6 +123,8 @@ class MADDPG(object):
                               dim=1)
         pol_loss = -curr_agent.critic(vf_in).mean()
         pol_loss.backward()
+        if parallel:
+            average_gradients(curr_agent.policy)
         curr_agent.policy_optimizer.step()
 
     def update_all_targets(self):

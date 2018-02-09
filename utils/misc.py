@@ -1,3 +1,6 @@
+import os
+import torch.distributed as dist
+
 # https://github.com/ikostrikov/pytorch-ddpg-naf/blob/master/ddpg.py#L11
 def soft_update(target, source, tau):
     """
@@ -21,3 +24,19 @@ def hard_update(target, source):
     """
     for target_param, param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(param.data)
+
+# https://github.com/seba-1511/dist_tuto.pth/blob/gh-pages/train_dist.py
+def average_gradients(model):
+    """ Gradient averaging. """
+    size = float(dist.get_world_size())
+    for param in model.parameters():
+        dist.all_reduce(param.grad.data, op=dist.reduce_op.SUM, group=0)
+        param.grad.data /= size
+
+# https://github.com/seba-1511/dist_tuto.pth/blob/gh-pages/train_dist.py
+def init_processes(rank, size, fn, backend='gloo'):
+    """ Initialize the distributed environment. """
+    os.environ['MASTER_ADDR'] = '127.0.0.1'
+    os.environ['MASTER_PORT'] = '29500'
+    dist.init_process_group(backend, rank=rank, world_size=size)
+    fn(rank, size)
