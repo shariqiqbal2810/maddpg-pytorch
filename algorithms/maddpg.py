@@ -9,36 +9,28 @@ class MADDPG(object):
     """
     Wrapper class for DDPG-esque (i.e. also MADDPG) agents in multi-agent task
     """
-    def __init__(self, action_spaces, observation_spaces, agent_types,
+    def __init__(self, agent_init_params, agent_types,
                  gamma=0.95, tau=0.01, lr=0.01):
         """
         Inputs:
-            action_spaces: Action spaces corresponding to each agent (from env)
-            observation_spaces: Observation spaces corresponding to each agent.
-            agent_types: Learning algorithm for each agent (DDPG or MADDPG)
+            agent_init_params (list of dict): List of dicts with parameters to
+                                              initialize each agent
+                num_in_pol (int): Input dimensions to policy
+                num_out_pol (int): Output dimensions to policy
+                num_in_critic (int): Input dimensions to critic
+            agent_types (list of str): Learning algorithm for each agent (DDPG
+                                       or MADDPG)
             gamma (float): Discount factor
             tau (float): Target update rate
             lr (float): Learning rate for policy and critic
         """
-        assert(len(action_spaces) == len(observation_spaces) == len(agent_types),
-               "Inputs do not all correspond to the same number of agents")
         self.nagents = len(agent_types)
         self.agent_types = agent_types
-        self.agents = []
-        for acsp, obsp, atype, i in zip(action_spaces, observation_spaces,
-                                        agent_types, range(self.nagents)):
-            num_in_pol = obsp.shape[0]
-            num_out_pol = acsp.shape[0]
-            num_in_critic = obsp.shape[0]
-            if atype == "MADDPG":
-                for oacsp in action_spaces:
-                    num_in_critic += oacsp.shape[0]
-            else:
-                num_in_critic += acsp.shape[0]
-            self.agents.append(DDPGAgent(num_in_pol, num_out_pol, num_in_critic, lr=lr))
-
+        self.agents = [DDPGAgent(lr=lr, **params) for params in agent_init_params]
+        self.agent_init_params = agent_init_params
         self.gamma = gamma
         self.tau = tau
+        self.lr = lr
         self.pol_dev = 'cpu'  # device for policies
         self.critic_dev = 'cpu'  # device for critics
         self.trgt_pol_dev = 'cpu'  # device for target policies
@@ -169,15 +161,49 @@ class MADDPG(object):
                 a.policy = fn(a.policy)
             self.pol_dev = device
 
-    def save(self):
+    def save(self, filename):
         """
         Save trained parameters of all agents into one file
         """
-        pass
+        self.prep_training(device='cpu')  # move parameters to CPU before saving
+        save_dict = {'init_dict': {'gamma': self.gamma, 'tau': self.tau,
+                                   'lr': self.lr,
+                                   'agent_types': self.agent_types,
+                                   'agent_init_params': self.agent_init_params},
+                     'agent_params': [a.get_params() for a in self.agents]}
+        torch.save(save_dict, filename)
 
     @classmethod
-    def load(cls, filename):
+    def init_from_env(cls, env, agent_types, gamma=0.95, tau=0.01, lr=0.01):
         """
-        Instantiate instance of this class from saved file
+        Instantiate instance of this class from multi-agent environment
         """
-        pass
+        agent_init_params = []
+        for acsp, obsp, atype in zip(env.action_space, env.observation_space,
+                                     agent_types):
+            num_in_pol = obsp.shape[0]
+            num_out_pol = acsp.shape[0]
+            num_in_critic = obsp.shape[0]
+            if atype == "MADDPG":
+                for oacsp in env.action_space:
+                    num_in_critic += oacsp.shape[0]
+            else:
+                num_in_critic += acsp.shape[0]
+            agent_init_params.append({'num_in_pol': num_in_pol,
+                                      'num_out_pol': num_out_pol,
+                                      'num_in_critic': num_in_critic})
+        init_dict = {'gamma': gamma, 'tau': tau, 'lr': lr,
+                     'agent_types': agent_types,
+                     'agent_init_params': agent_init_params}
+        return cls(**init_dict)
+
+    @classmethod
+    def init_from_save(cls, filename):
+        """
+        Instantiate instance of this class from file created by 'save' method
+        """
+        save_dict = torch.load(filename)
+        instance = cls(**save_dict['init_dict'])
+        for a, params in zip(instance.agents, save_dict['agent_params']):
+            a.load_params(params)
+        return instance
