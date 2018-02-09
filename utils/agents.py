@@ -38,7 +38,8 @@ class DDPGAgent(object):
         """
         action = self.policy(obs)
         if training:
-            action += Variable(Tensor(self.exploration.noise()))
+            action += Variable(Tensor(self.exploration.noise()),
+                               requires_grad=False)
         return action.clamp(-1, 1)
 
     def get_params(self):
