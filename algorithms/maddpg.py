@@ -9,7 +9,7 @@ class MADDPG(object):
     """
     Wrapper class for DDPG-esque (i.e. also MADDPG) agents in multi-agent task
     """
-    def __init__(self, agent_init_params, agent_types,
+    def __init__(self, agent_init_params, alg_types,
                  gamma=0.95, tau=0.01, lr=0.01):
         """
         Inputs:
@@ -18,14 +18,14 @@ class MADDPG(object):
                 num_in_pol (int): Input dimensions to policy
                 num_out_pol (int): Output dimensions to policy
                 num_in_critic (int): Input dimensions to critic
-            agent_types (list of str): Learning algorithm for each agent (DDPG
+            alg_types (list of str): Learning algorithm for each agent (DDPG
                                        or MADDPG)
             gamma (float): Discount factor
             tau (float): Target update rate
             lr (float): Learning rate for policy and critic
         """
-        self.nagents = len(agent_types)
-        self.agent_types = agent_types
+        self.nagents = len(alg_types)
+        self.alg_types = alg_types
         self.agents = [DDPGAgent(lr=lr, **params) for params in agent_init_params]
         self.agent_init_params = agent_init_params
         self.gamma = gamma
@@ -84,7 +84,7 @@ class MADDPG(object):
         curr_agent = self.agents[agent_i]
 
         curr_agent.critic_optimizer.zero_grad()
-        if self.agent_types[agent_i] == 'MADDPG':
+        if self.alg_types[agent_i] == 'MADDPG':
             all_trgt_acs = [pi(nobs) for pi, nobs in zip(self.target_policies,
                                                          next_obs)]
             trgt_vf_in = torch.cat((next_obs[agent_i], *all_trgt_acs), dim=1)
@@ -95,7 +95,7 @@ class MADDPG(object):
         target_value = (rews[agent_i].view(-1, 1) + self.gamma *
                         curr_agent.target_critic(trgt_vf_in))
 
-        if self.agent_types[agent_i] == 'MADDPG':
+        if self.alg_types[agent_i] == 'MADDPG':
             vf_in = torch.cat((obs[agent_i], *acs), dim=1)
         else:  # DDPG
             vf_in = torch.cat((obs[agent_i], acs[agent_i]), dim=1)
@@ -107,7 +107,7 @@ class MADDPG(object):
         curr_agent.critic_optimizer.step()
 
         curr_agent.policy_optimizer.zero_grad()
-        if self.agent_types[agent_i] == 'MADDPG':
+        if self.alg_types[agent_i] == 'MADDPG':
             all_pol_acs = [pi(ob) for pi, ob in zip(self.policies, obs)]
             vf_in = torch.cat((obs[agent_i], *all_pol_acs), dim=1)
         else:  # DDPG
@@ -168,23 +168,25 @@ class MADDPG(object):
         self.prep_training(device='cpu')  # move parameters to CPU before saving
         save_dict = {'init_dict': {'gamma': self.gamma, 'tau': self.tau,
                                    'lr': self.lr,
-                                   'agent_types': self.agent_types,
+                                   'alg_types': self.alg_types,
                                    'agent_init_params': self.agent_init_params},
                      'agent_params': [a.get_params() for a in self.agents]}
         torch.save(save_dict, filename)
 
     @classmethod
-    def init_from_env(cls, env, agent_types, gamma=0.95, tau=0.01, lr=0.01):
+    def init_from_env(cls, env, agent_alg, adversary_alg, gamma=0.95, tau=0.01, lr=0.01):
         """
         Instantiate instance of this class from multi-agent environment
         """
         agent_init_params = []
-        for acsp, obsp, atype in zip(env.action_space, env.observation_space,
-                                     agent_types):
+        alg_types = [adversary_alg if atype == 'adversary' else agent_alg for
+                     atype in env.agent_types]
+        for acsp, obsp, algtype in zip(env.action_space, env.observation_space,
+                                       alg_types):
             num_in_pol = obsp.shape[0]
             num_out_pol = acsp.shape[0]
             num_in_critic = obsp.shape[0]
-            if atype == "MADDPG":
+            if algtype == "MADDPG":
                 for oacsp in env.action_space:
                     num_in_critic += oacsp.shape[0]
             else:
@@ -193,7 +195,7 @@ class MADDPG(object):
                                       'num_out_pol': num_out_pol,
                                       'num_in_critic': num_in_critic})
         init_dict = {'gamma': gamma, 'tau': tau, 'lr': lr,
-                     'agent_types': agent_types,
+                     'alg_types': alg_types,
                      'agent_init_params': agent_init_params}
         return cls(**init_dict)
 

@@ -27,6 +27,9 @@ def worker(remote, parent_remote, env_fn_wrapper):
             break
         elif cmd == 'get_spaces':
             remote.send((env.observation_space, env.action_space))
+        elif cmd == 'get_agent_types':
+            remote.send(['adversary' if a.adversary else 'agent' for a in
+                         env.agents])
         else:
             raise NotImplementedError
 
@@ -50,6 +53,8 @@ class SubprocVecEnv(VecEnv):
 
         self.remotes[0].send(('get_spaces', None))
         observation_space, action_space = self.remotes[0].recv()
+        self.remotes[0].send(('get_agent_types', None))
+        self.agent_types = self.remotes[0].recv()
         VecEnv.__init__(self, len(env_fns), observation_space, action_space)
 
     def step_async(self, actions):
@@ -91,6 +96,8 @@ class DummyVecEnv(VecEnv):
         self.envs = [fn() for fn in env_fns]
         env = self.envs[0]        
         VecEnv.__init__(self, len(env_fns), env.observation_space, env.action_space)
+        self.agent_types = ['adversary' if a.adversary else 'agent' for a in
+                            env.agents]
         self.ts = np.zeros(len(self.envs), dtype='int')        
         self.actions = None
 
