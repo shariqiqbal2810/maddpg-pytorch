@@ -28,8 +28,9 @@ def run(config):
     if not model_dir.exists():
         curr_run = 'run1'
     else:
-        exst_run_nums = [int(str(folder).split('run')[1]) for folder in
-                         model_dir.iterdir() if str(folder).startswith('run')]
+        exst_run_nums = [int(str(folder.name).split('run')[1]) for folder in
+                         model_dir.iterdir() if
+                         str(folder.name).startswith('run')]
         if len(exst_run_nums) == 0:
             curr_run = 'run1'
         else:
