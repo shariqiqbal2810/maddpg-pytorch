@@ -81,3 +81,9 @@ class ReplayBuffer(object):
                 [cast(self.next_obs_buffs[i][inds]) for i in range(self.num_agents)],
                 [cast(self.done_buffs[i][inds]) for i in range(self.num_agents)])
 
+    def get_average_rewards(self, N):
+        if self.filled_i == self.max_steps:
+            inds = np.arange(self.curr_i - N, self.curr_i)  # allow for negative indexing
+        else:
+            inds = np.arange(max(0, self.curr_i - N), self.curr_i)
+        return [self.rew_buffs[i][inds].mean() for i in range(self.num_agents)]

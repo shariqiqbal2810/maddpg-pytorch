@@ -35,6 +35,7 @@ class MADDPG(object):
         self.critic_dev = 'cpu'  # device for critics
         self.trgt_pol_dev = 'cpu'  # device for target policies
         self.trgt_critic_dev = 'cpu'  # device for target critics
+        self.niter = 0
 
     @property
     def policies(self):
@@ -69,7 +70,7 @@ class MADDPG(object):
         return [a.step(obs, training=training) for a, obs in zip(self.agents,
                                                                  observations)]
 
-    def update(self, sample, agent_i, parallel=False):
+    def update(self, sample, agent_i, parallel=False, logger=None):
         """
         Update parameters of agent model based on sample from replay buffer
         Inputs:
@@ -79,6 +80,8 @@ class MADDPG(object):
                     corresponding to each agent
             agent_i (int): index of agent to update
             parallel (bool): If true, will average gradients across threads
+            logger (SummaryWriter from Tensorboard-Pytorch):
+                If passed in, important quantities will be logged
         """
         obs, acs, rews, next_obs, dones = sample
         curr_agent = self.agents[agent_i]
@@ -118,6 +121,12 @@ class MADDPG(object):
         if parallel:
             average_gradients(curr_agent.policy)
         curr_agent.policy_optimizer.step()
+        if logger is not None:
+            logger.add_scalars('agent%i/losses' % agent_i,
+                               {'vf_loss': vf_loss,
+                                'pol_loss': pol_loss},
+                               self.niter)
+        self.niter += 1
 
     def update_all_targets(self):
         """

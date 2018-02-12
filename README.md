@@ -8,6 +8,7 @@ Cooperative-Competitive Environments* (Lowe et. al. 2017)
 * My [fork](https://github.com/shariqiqbal2810/multiagent-particle-envs) of Multi-agent Particle Environments
 * [PyTorch](http://pytorch.org/)
 * [OpenAI Gym](https://github.com/openai/gym)
+* [Tensorboard-Pytorch](https://github.com/lanpa/tensorboard-pytorch) (for logging)
 
 
-The OpenAI baselines [Tensorflow implementation](https://github.com/openai/baselines/tree/master/baselines/ddpg) and Ilya Kostrikov's [Pytorch implementation](https://github.com/ikostrikov/pytorch-ddpg-naf) of DDPG were used as a reference.
+The OpenAI baselines [Tensorflow implementation](https://github.com/openai/baselines/tree/master/baselines/ddpg) and Ilya Kostrikov's [Pytorch implementation](https://github.com/ikostrikov/pytorch-ddpg-naf) of DDPG were used as references.
