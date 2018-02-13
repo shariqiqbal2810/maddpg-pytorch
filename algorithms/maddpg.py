@@ -58,16 +58,16 @@ class MADDPG(object):
         for a in self.agents:
             a.exploration.reset()
 
-    def step(self, observations, training=False):
+    def step(self, observations, explore=False):
         """
         Take a step forward in environment with all agents
         Inputs:
             observations: List of observations for each agent
-            training (boolean): Whether or not to add exploration noise
+            explore (boolean): Whether or not to add exploration noise
         Outputs:
             actions: List of actions for each agent
         """
-        return [a.step(obs, training=training) for a, obs in zip(self.agents,
+        return [a.step(obs, explore=explore) for a, obs in zip(self.agents,
                                                                  observations)]
 
     def update(self, sample, agent_i, parallel=False, logger=None):
@@ -138,6 +138,11 @@ class MADDPG(object):
             soft_update(a.target_policy, a.policy, self.tau)
 
     def prep_training(self, device='gpu'):
+        for a in self.agents:
+            a.policy.train()
+            a.critic.train()
+            a.target_policy.train()
+            a.target_critic.train()
         if device == 'gpu':
             fn = lambda x: x.cuda()
         else:
@@ -160,6 +165,8 @@ class MADDPG(object):
             self.trgt_critic_dev = device
 
     def prep_rollouts(self, device='cpu'):
+        for a in self.agents:
+            a.policy.eval()
         if device == 'gpu':
             fn = lambda x: x.cuda()
         else:

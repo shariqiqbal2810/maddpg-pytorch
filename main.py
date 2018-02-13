@@ -51,8 +51,7 @@ def run(config):
         print("Episode %i of %i" % (ep_i + 1, config.n_episodes))
         obs = env.reset()
         # obs.shape = (n_rollout_threads, nagent)(nobs), nobs differs per agent so not tensor
-        if USE_CUDA:
-            maddpg.prep_rollouts(device='cpu')
+        maddpg.prep_rollouts(device='cpu')
 
         explr_pct_remaining = max(0, config.n_exploration_eps - ep_i) / config.n_exploration_eps
         maddpg.scale_noise(config.final_noise_scale + (config.init_noise_scale - config.final_noise_scale) * explr_pct_remaining)
@@ -64,7 +63,7 @@ def run(config):
                                   requires_grad=False)
                          for i in range(maddpg.nagents)]
             # get actions as torch Variables
-            torch_agent_actions = maddpg.step(torch_obs, training=True)
+            torch_agent_actions = maddpg.step(torch_obs, explore=True)
             # convert actions to numpy arrays
             agent_actions = [ac.data.numpy() for ac in torch_agent_actions]
             # rearrange actions to be per environment
@@ -80,6 +79,8 @@ def run(config):
             logger.add_scalar('agent%i/mean_episode_rewards' % a_i, a_ep_rew, ep_i)
         if USE_CUDA:
             maddpg.prep_training(device='gpu')
+        else:
+            maddpg.prep_training(device='cpu')
         if len(replay_buffer) >= config.batch_size:
             for u_i in range(config.updates_per_episode):
                 for a_i in range(maddpg.nagents):
@@ -117,7 +118,7 @@ if __name__ == '__main__':
     parser.add_argument("--n_exploration_eps", default=10000, type=int)
     parser.add_argument("--init_noise_scale", default=0.3)
     parser.add_argument("--final_noise_scale", default=0.0)
-    parser.add_argument("--save_interval", default=100, type=int)
+    parser.add_argument("--save_interval", default=1000, type=int)
     # parser.add_argument("--learning_rate",
     #                     default=1e-4, type=float,
     #                     help="Learning rate of the model")

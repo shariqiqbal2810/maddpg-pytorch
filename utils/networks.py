@@ -6,7 +6,7 @@ class MLPNetwork(nn.Module):
     MLP network (can be used as value or policy)
     """
     def __init__(self, input_dim, out_dim, hidden_dim=64, nonlin=F.relu,
-                 constrain_out=False):
+                 constrain_out=False, norm_in=True):
         """
         Inputs:
             input_dim (int): Number of dimensions in input
@@ -16,6 +16,12 @@ class MLPNetwork(nn.Module):
         """
         super(MLPNetwork, self).__init__()
 
+        if norm_in:  # normalize inputs
+            self.in_fn = nn.BatchNorm1d(input_dim)
+            self.in_fn.weight.data.fill_(1)
+            self.in_fn.bias.data.fill_(0)
+        else:
+            self.in_fn = lambda x: x
         self.fc1 = nn.Linear(input_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, hidden_dim)
         self.fc3 = nn.Linear(hidden_dim, out_dim)
@@ -33,7 +39,7 @@ class MLPNetwork(nn.Module):
         Outputs:
             out (PyTorch Matrix): Output of network (actions, values, etc)
         """
-        h1 = self.nonlin(self.fc1(X))
+        h1 = self.nonlin(self.fc1(self.in_fn(X)))
         h2 = self.nonlin(self.fc2(h1))
         out = self.out_fn(self.fc3(h2))
         return out

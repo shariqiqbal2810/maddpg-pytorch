@@ -27,7 +27,7 @@ def run(config):
                                   requires_grad=False)
                          for i in range(maddpg.nagents)]
             # get actions as torch Variables
-            torch_actions = maddpg.step(torch_obs, training=False)
+            torch_actions = maddpg.step(torch_obs, explore=False)
             # convert actions to numpy arrays
             actions = [ac.data.numpy() for ac in torch_actions]
             obs, rewards, dones, infos = env.step(actions)

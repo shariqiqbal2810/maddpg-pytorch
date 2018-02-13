@@ -27,17 +27,17 @@ class DDPGAgent(object):
         self.critic_optimizer = Adam(self.critic.parameters(), lr=lr)
         self.exploration = OUNoise(num_out_pol)
 
-    def step(self, obs, training=False):
+    def step(self, obs, explore=False):
         """
         Take a step forward in environment for a minibatch of observations
         Inputs:
             obs (PyTorch Variable): Observations for this agent
-            training (boolean): Whether or not to add exploration noise
+            explore (boolean): Whether or not to add exploration noise
         Outputs:
             action (PyTorch Variable): Actions for this agent
         """
         action = self.policy(obs)
-        if training:
+        if explore:
             action += Variable(Tensor(self.exploration.noise()),
                                requires_grad=False)
         return action.clamp(-1, 1)
