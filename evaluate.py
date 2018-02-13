@@ -14,6 +14,7 @@ def run(config):
 
     env = make_env(config.env_id)
     maddpg = MADDPG.init_from_save(model_path)
+    maddpg.prep_rollouts(device='cpu')
     ifi = 1 / config.fps  # inter-frame interval
 
     for ep_i in range(config.n_episodes):
@@ -23,13 +24,13 @@ def run(config):
         for t_i in range(config.episode_length):
             calc_start = time.time()
             # rearrange observations to be per agent, and convert to torch Variable
-            torch_obs = [Variable(torch.Tensor(obs[i]),
+            torch_obs = [Variable(torch.Tensor(obs[i]).view(1, -1),
                                   requires_grad=False)
                          for i in range(maddpg.nagents)]
             # get actions as torch Variables
             torch_actions = maddpg.step(torch_obs, explore=False)
             # convert actions to numpy arrays
-            actions = [ac.data.numpy() for ac in torch_actions]
+            actions = [ac.data.numpy().flatten() for ac in torch_actions]
             obs, rewards, dones, infos = env.step(actions)
             calc_end = time.time()
             elapsed = calc_end - calc_start
