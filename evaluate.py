@@ -12,8 +12,8 @@ def run(config):
     model_path = (Path('./models') / config.env_id / config.model_name /
                   ('run%i' % config.run_num) / 'model.pt')
 
-    env = make_env(config.env_id)
     maddpg = MADDPG.init_from_save(model_path)
+    env = make_env(config.env_id, discrete_action=maddpg.discrete_action)
     maddpg.prep_rollouts(device='cpu')
     ifi = 1 / config.fps  # inter-frame interval
 

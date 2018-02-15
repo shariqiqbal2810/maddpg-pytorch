@@ -2,7 +2,7 @@ from torch import Tensor
 from torch.autograd import Variable
 from torch.optim import Adam
 from .networks import MLPNetwork
-from .misc import hard_update
+from .misc import hard_update, onehot_from_logits
 from .noise import OUNoise
 
 class DDPGAgent(object):
@@ -10,7 +10,8 @@ class DDPGAgent(object):
     General class for DDPG agents (policy, critic, target policy, target
     critic, exploration noise)
     """
-    def __init__(self, num_in_pol, num_out_pol, num_in_critic, lr=0.01):
+    def __init__(self, num_in_pol, num_out_pol, num_in_critic, lr=0.01,
+                 discrete_action=True):
         """
         Inputs:
             num_in_pol (int): number of dimensions for policy input
@@ -19,13 +20,30 @@ class DDPGAgent(object):
         """
         self.policy = MLPNetwork(num_in_pol, num_out_pol, constrain_out=True)
         self.critic = MLPNetwork(num_in_critic, 1, constrain_out=False)
-        self.target_policy = MLPNetwork(num_in_pol, num_out_pol, constrain_out=True)
-        self.target_critic = MLPNetwork(num_in_critic, 1, constrain_out=False)
+        self.target_policy = MLPNetwork(num_in_pol, num_out_pol,
+                                        constrain_out=True,
+                                        discrete_action=discrete_action)
+        self.target_critic = MLPNetwork(num_in_critic, 1, constrain_out=False,
+                                        discrete_action=discrete_action)
         hard_update(self.target_policy, self.policy)
         hard_update(self.target_critic, self.critic)
         self.policy_optimizer = Adam(self.policy.parameters(), lr=lr)
         self.critic_optimizer = Adam(self.critic.parameters(), lr=lr)
-        self.exploration = OUNoise(num_out_pol)
+        if not discrete_action:
+            self.exploration = OUNoise(num_out_pol)
+        else:
+            self.exploration = 0.3  # epsilon for eps-greedy
+        self.discrete_action = discrete_action
+
+    def reset_noise(self):
+        if not self.discrete_action:
+            self.exploration.reset()
+
+    def scale_noise(self, scale):
+        if self.discrete_action:
+            self.exploration = scale
+        else:
+            self.exploration.scale = scale
 
     def step(self, obs, explore=False):
         """
@@ -37,10 +55,16 @@ class DDPGAgent(object):
             action (PyTorch Variable): Actions for this agent
         """
         action = self.policy(obs)
-        if explore:
-            action += Variable(Tensor(self.exploration.noise()),
-                               requires_grad=False)
-        return action.clamp(-1, 1)
+        if self.discrete_action:
+            # eps-greedy if explore=True, argmax otherwise
+            eps = int(explore) * self.exploration
+            action = onehot_from_logits(action, eps=eps)
+        else:  # continuous action
+            if explore:
+                action += Variable(Tensor(self.exploration.noise()),
+                                   requires_grad=False)
+            action = action.clamp(-1, 1)
+        return action
 
     def get_params(self):
         return {'policy': self.policy.state_dict(),

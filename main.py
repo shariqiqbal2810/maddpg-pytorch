@@ -3,6 +3,7 @@ import torch
 import time
 import os
 import numpy as np
+from gym.spaces import Box, Discrete
 from pathlib import Path
 from torch.autograd import Variable
 from tensorboardX import SummaryWriter
@@ -13,10 +14,10 @@ from algorithms.maddpg import MADDPG
 
 USE_CUDA = torch.cuda.is_available()
 
-def make_parallel_env(env_id, n_rollout_threads, seed):
+def make_parallel_env(env_id, n_rollout_threads, seed, discrete_action):
     def get_env_fn(rank):
         def init_env():
-            env = make_env(env_id)
+            env = make_env(env_id, discrete_action=discrete_action)
             env.seed(seed + rank * 1000)
             np.random.seed(seed + rank * 1000)
             return env
@@ -42,11 +43,13 @@ def run(config):
 
     torch.manual_seed(config.seed)
     np.random.seed(config.seed)
-    env = make_parallel_env(config.env_id, config.n_rollout_threads, config.seed)
+    env = make_parallel_env(config.env_id, config.n_rollout_threads, config.seed,
+                            config.discrete_action)
     maddpg = MADDPG.init_from_env(env, config.agent_alg, config.adversary_alg)
     replay_buffer = ReplayBuffer(config.buffer_length, maddpg.nagents,
                                  [obsp.shape[0] for obsp in env.observation_space],
-                                 [acsp.shape[0] for acsp in env.action_space])
+                                 [acsp.shape[0] if isinstance(acsp, Box) else acsp.n
+                                  for acsp in env.action_space])
     for ep_i in range(config.n_episodes):
         print("Episode %i of %i" % (ep_i + 1, config.n_episodes))
         obs = env.reset()
@@ -128,6 +131,8 @@ if __name__ == '__main__':
     parser.add_argument("--adversary_alg",
                         default="MADDPG", type=str,
                         choices=['MADDPG', 'DDPG'])
+    parser.add_argument("--discrete_action",
+                        action='store_true')
 
     config = parser.parse_args()
 
