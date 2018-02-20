@@ -72,8 +72,6 @@ def run(config):
             # rearrange actions to be per environment
             actions = [[ac[i] for ac in agent_actions] for i in range(config.n_rollout_threads)]
             next_obs, rewards, dones, infos = env.step(actions)
-            if t_i == config.episode_length - 1:
-                dones[:] = True
             replay_buffer.push(obs, agent_actions, rewards, next_obs, dones)
             obs = next_obs
         ep_rews = replay_buffer.get_average_rewards(

@@ -112,7 +112,8 @@ class MADDPG(object):
                                         curr_agent.target_policy(next_obs[agent_i])),
                                        dim=1)
         target_value = (rews[agent_i].view(-1, 1) + self.gamma *
-                        curr_agent.target_critic(trgt_vf_in))
+                        curr_agent.target_critic(trgt_vf_in) *
+                        (1 - dones[agent_i].view(-1, 1)))
 
         if self.alg_types[agent_i] == 'MADDPG':
             vf_in = torch.cat((obs[agent_i], *acs), dim=1)
