@@ -164,7 +164,6 @@ class MADDPG(object):
                                {'vf_loss': vf_loss,
                                 'pol_loss': pol_loss},
                                self.niter)
-        self.niter += 1
 
     def update_all_targets(self):
         """
@@ -174,6 +173,7 @@ class MADDPG(object):
         for a in self.agents:
             soft_update(a.target_critic, a.critic, self.tau)
             soft_update(a.target_policy, a.policy, self.tau)
+        self.niter += 1
 
     def prep_training(self, device='gpu'):
         for a in self.agents:
