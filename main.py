@@ -45,7 +45,7 @@ def run(config):
     np.random.seed(config.seed)
     env = make_parallel_env(config.env_id, config.n_rollout_threads, config.seed,
                             config.discrete_action)
-    maddpg = MADDPG.init_from_env(env, config.agent_alg, config.adversary_alg)
+    maddpg = MADDPG.init_from_env(env, agent_alg=config.agent_alg, adversary_alg=config.adversary_alg)
     replay_buffer = ReplayBuffer(config.buffer_length, maddpg.nagents,
                                  [obsp.shape[0] for obsp in env.observation_space],
                                  [acsp.shape[0] if isinstance(acsp, Box) else acsp.n
