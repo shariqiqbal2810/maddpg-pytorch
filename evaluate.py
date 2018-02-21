@@ -10,7 +10,12 @@ from algorithms.maddpg import MADDPG
 
 def run(config):
     model_path = (Path('./models') / config.env_id / config.model_name /
-                  ('run%i' % config.run_num) / 'model.pt')
+                  ('run%i' % config.run_num))
+    if config.incremental is not None:
+        model_path = model_path / 'incremental' / ('model_ep%i.pt' %
+                                                   config.incremental)
+    else:
+        model_path = model_path / 'model.pt'
 
     maddpg = MADDPG.init_from_save(model_path)
     env = make_env(config.env_id, discrete_action=maddpg.discrete_action)
@@ -48,6 +53,9 @@ if __name__ == '__main__':
                         help="Name of directory to store " +
                              "model/training contents")
     parser.add_argument("run_num", default=1, type=int)
+    parser.add_argument("--incremental", default=None, type=int,
+                        help="Load incremental policy from given episode " +
+                             "rather than final policy")
     parser.add_argument("--n_episodes", default=10, type=int)
     parser.add_argument("--episode_length", default=100, type=int)
     parser.add_argument("--fps", default=30, type=int)
