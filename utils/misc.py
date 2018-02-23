@@ -1,5 +1,6 @@
 import os
 import torch
+import torch.nn.functional as F
 import torch.distributed as dist
 from torch.autograd import Variable
 import numpy as np
@@ -27,6 +28,10 @@ def hard_update(target, source):
     """
     for target_param, param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(param.data)
+
+def clip_gradients(model, ratio=0.5):
+    for param in model.parameters():
+        param.grad = param.grad.clamp(-ratio, ratio)
 
 # https://github.com/seba-1511/dist_tuto.pth/blob/gh-pages/train_dist.py
 def average_gradients(model):
@@ -60,4 +65,36 @@ def onehot_from_logits(logits, eps=0.0):
     return torch.stack([argmax_acs[i] if r > eps else rand_acs[i] for i, r in
                         enumerate(torch.rand(logits.shape[0]))])
 
+# modified for PyTorch from https://github.com/ericjang/gumbel-softmax/blob/master/Categorical%20VAE.ipynb
+def sample_gumbel(shape, eps=1e-20, cuda=True):
+    """Sample from Gumbel(0, 1)"""
+    if cuda:
+        tens_type = torch.cuda.FloatTensor
+    else:
+        tens_type = torch.FloatTensor
+    U = Variable(tens_type(*shape).uniform_(), requires_grad=False)
+    return -torch.log(-torch.log(U + eps) + eps)
 
+# modified for PyTorch from https://github.com/ericjang/gumbel-softmax/blob/master/Categorical%20VAE.ipynb
+def gumbel_softmax_sample(logits, temperature, cuda=True):
+    """ Draw a sample from the Gumbel-Softmax distribution"""
+    y = logits + sample_gumbel(logits.shape, cuda=cuda)
+    return F.softmax(y / temperature, dim=1)
+
+# modified for PyTorch from https://github.com/ericjang/gumbel-softmax/blob/master/Categorical%20VAE.ipynb
+def gumbel_softmax(logits, temperature=1.0, hard=False, cuda=True):
+    """Sample from the Gumbel-Softmax distribution and optionally discretize.
+    Args:
+      logits: [batch_size, n_class] unnormalized log-probs
+      temperature: non-negative scalar
+      hard: if True, take argmax, but differentiate w.r.t. soft sample y
+    Returns:
+      [batch_size, n_class] sample from the Gumbel-Softmax distribution.
+      If hard=True, then the returned sample will be one-hot, otherwise it will
+      be a probabilitiy distribution that sums to 1 across classes
+    """
+    y = gumbel_softmax_sample(logits, temperature, cuda=cuda)
+    if hard:
+        y_hard = onehot_from_logits(y)
+        y = (y_hard - y).detach() + y
+    return y

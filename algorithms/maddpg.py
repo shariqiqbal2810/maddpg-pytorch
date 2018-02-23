@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from gym.spaces import Box, Discrete
 from utils.networks import MLPNetwork
-from utils.misc import soft_update, average_gradients, onehot_from_logits
+from utils.misc import soft_update, average_gradients, clip_gradients, onehot_from_logits, gumbel_softmax
 from utils.agents import DDPGAgent
 
 MSELoss = torch.nn.MSELoss()
@@ -124,39 +124,41 @@ class MADDPG(object):
         vf_loss.backward()
         if parallel:
             average_gradients(curr_agent.critic)
+        clip_gradients(curr_agent.critic)
         curr_agent.critic_optimizer.step()
 
         curr_agent.policy_optimizer.zero_grad()
 
         if self.discrete_action:
-            # Forward pass as if onehot but backprop through the differentiable
-            # softmax fn. The MADDPG paper uses the Gumbel-Softmax trick to backprop
+            # Forward pass as if onehot (hard=True) but backprop through a differentiable
+            # Gumbel-Softmax sample. The MADDPG paper uses the Gumbel-Softmax trick to backprop
             # through discrete categorical samples, but I'm not sure if that is
             # correct since it removes the assumption of a deterministic policy for
-            # DDPG.
-            policy_out = curr_agent.policy(obs[agent_i])
-            curr_pol_out = ((onehot_from_logits(policy_out) -
-                             F.softmax(policy_out, dim=1)).detach() +
-                            F.softmax(policy_out, dim=1))
+            # DDPG. Regardless, discrete policies don't seem to learn properly without it.
+            curr_pol_out = curr_agent.policy(obs[agent_i])
+            curr_pol_vf_in = gumbel_softmax(curr_pol_out, hard=True, cuda=(self.pol_dev == 'gpu'))
         else:
             curr_pol_out = curr_agent.policy(obs[agent_i])
+            curr_pol_vf_in = curr_pol_out
         if self.alg_types[agent_i] == 'MADDPG':
             all_pol_acs = []
             for i, pi, ob in zip(range(self.nagents), self.policies, obs):
                 if i == agent_i:
-                    all_pol_acs.append(curr_pol_out)
+                    all_pol_acs.append(curr_pol_vf_in)
                 elif self.discrete_action:
                     all_pol_acs.append(onehot_from_logits(pi(ob)))
                 else:
                     all_pol_acs.append(pi(ob))
             vf_in = torch.cat((*obs, *all_pol_acs), dim=1)
         else:  # DDPG
-            vf_in = torch.cat((obs[agent_i], curr_pol_out),
+            vf_in = torch.cat((obs[agent_i], curr_pol_vf_in),
                               dim=1)
         pol_loss = -curr_agent.critic(vf_in).mean()
+        pol_loss += (curr_pol_out**2).mean() * 1e-3
         pol_loss.backward()
         if parallel:
             average_gradients(curr_agent.policy)
+        clip_gradients(curr_agent.policy)
         curr_agent.policy_optimizer.step()
         if logger is not None:
             logger.add_scalars('agent%i/losses' % agent_i,

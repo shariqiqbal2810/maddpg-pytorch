@@ -99,8 +99,11 @@ class DummyVecEnv(VecEnv):
         self.envs = [fn() for fn in env_fns]
         env = self.envs[0]        
         VecEnv.__init__(self, len(env_fns), env.observation_space, env.action_space)
-        self.agent_types = ['adversary' if a.adversary else 'agent' for a in
-                            env.agents]
+        if all([hasattr(a, 'adversary') for a in env.agents]):
+            self.agent_types = ['adversary' if a.adversary else 'agent' for a in
+                                env.agents]
+        else:
+            self.agent_types = ['agent' for _ in env.agents]
         self.ts = np.zeros(len(self.envs), dtype='int')        
         self.actions = None
 
