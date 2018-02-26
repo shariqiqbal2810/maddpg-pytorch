@@ -46,7 +46,8 @@ def run(config):
 
     torch.manual_seed(config.seed)
     np.random.seed(config.seed)
-    torch.set_num_threads(config.n_training_threads)
+    if not USE_CUDA:
+        torch.set_num_threads(config.n_training_threads)
     env = make_parallel_env(config.env_id, config.n_rollout_threads, config.seed,
                             config.discrete_action)
     maddpg = MADDPG.init_from_env(env, agent_alg=config.agent_alg,
@@ -84,9 +85,9 @@ def run(config):
             next_obs, rewards, dones, infos = env.step(actions)
             replay_buffer.push(obs, agent_actions, rewards, next_obs, dones)
             obs = next_obs
-            t += 1
+            t += config.n_rollout_threads
             if (len(replay_buffer) >= config.batch_size and
-                (t % config.steps_per_update) == 0):
+                (t % config.steps_per_update) < config.n_rollout_threads):
                 if USE_CUDA:
                     maddpg.prep_training(device='gpu')
                 else:
@@ -97,6 +98,7 @@ def run(config):
                                                       to_gpu=USE_CUDA)
                         maddpg.update(sample, a_i, logger=logger)
                     maddpg.update_all_targets()
+                maddpg.prep_rollouts(device='cpu')
         ep_rews = replay_buffer.get_average_rewards(
             config.episode_length * config.n_rollout_threads)
         for a_i, a_ep_rew in enumerate(ep_rews):
