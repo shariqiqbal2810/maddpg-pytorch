@@ -24,9 +24,7 @@ python main.py --help
 
 In this task, the two blue agents are rewarded by minimizing the closest of their distances to the green landmark (only one needs to be close to get optimal reward), while maximizing the distance of the red adversary from the green landmark. The red adversary is rewarded by minimizing it's distance to the green landmark; however, on any given trial, it does not know which landmark is green, so it must follow the blue agents. As such, the blue agents should learn to deceive the red agent by covering *both* landmarks.
 
-![Physical Deception Trial 1](assets/physical_deception/1.gif?raw=true "Physical Deception Trial 1")
-![Physical Deception Trial 2](assets/physical_deception/2.gif?raw=true "Physical Deception Trial 2")
-![Physical Deception Trial 3](assets/physical_deception/3.gif?raw=true "Physical Deception Trial 3")
+![Physical Deception Trial 1](assets/physical_deception/1.gif?raw=true "Physical Deception Trial 1"){:class="img-responsive"} ![Physical Deception Trial 2](assets/physical_deception/2.gif?raw=true "Physical Deception Trial 2"){:class="img-responsive"} ![Physical Deception Trial 3](assets/physical_deception/3.gif?raw=true "Physical Deception Trial 3"){:class="img-responsive"}
 
 ## Not Implemented
 
