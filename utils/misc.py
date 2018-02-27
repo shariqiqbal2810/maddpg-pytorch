@@ -29,10 +29,6 @@ def hard_update(target, source):
     for target_param, param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(param.data)
 
-def clip_gradients(model, ratio=0.5):
-    for param in model.parameters():
-        param.grad = param.grad.clamp(-ratio, ratio)
-
 # https://github.com/seba-1511/dist_tuto.pth/blob/gh-pages/train_dist.py
 def average_gradients(model):
     """ Gradient averaging. """
