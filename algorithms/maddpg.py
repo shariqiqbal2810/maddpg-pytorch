@@ -12,7 +12,8 @@ class MADDPG(object):
     Wrapper class for DDPG-esque (i.e. also MADDPG) agents in multi-agent task
     """
     def __init__(self, agent_init_params, alg_types,
-                 gamma=0.95, tau=0.01, lr=0.01, discrete_action=False):
+                 gamma=0.95, tau=0.01, lr=0.01, hidden_dim=64,
+                 discrete_action=False):
         """
         Inputs:
             agent_init_params (list of dict): List of dicts with parameters to
@@ -25,10 +26,13 @@ class MADDPG(object):
             gamma (float): Discount factor
             tau (float): Target update rate
             lr (float): Learning rate for policy and critic
+            hidden_dim (int): Number of hidden dimensions for networks
+            discrete_action (bool): Whether or not to use discrete action space
         """
         self.nagents = len(alg_types)
         self.alg_types = alg_types
         self.agents = [DDPGAgent(lr=lr, discrete_action=discrete_action,
+                                 hidden_dim=hidden_dim,
                                  **params)
                        for params in agent_init_params]
         self.agent_init_params = agent_init_params
@@ -227,7 +231,7 @@ class MADDPG(object):
 
     @classmethod
     def init_from_env(cls, env, agent_alg="MADDPG", adversary_alg="MADDPG",
-                      gamma=0.95, tau=0.01, lr=0.01):
+                      gamma=0.95, tau=0.01, lr=0.01, hidden_dim=64):
         """
         Instantiate instance of this class from multi-agent environment
         """
@@ -256,6 +260,7 @@ class MADDPG(object):
                                       'num_out_pol': num_out_pol,
                                       'num_in_critic': num_in_critic})
         init_dict = {'gamma': gamma, 'tau': tau, 'lr': lr,
+                     'hidden_dim': hidden_dim,
                      'alg_types': alg_types,
                      'agent_init_params': agent_init_params,
                      'discrete_action': discrete_action}
