@@ -140,7 +140,7 @@ class MADDPG(object):
             # correct since it removes the assumption of a deterministic policy for
             # DDPG. Regardless, discrete policies don't seem to learn properly without it.
             curr_pol_out = curr_agent.policy(obs[agent_i])
-            curr_pol_vf_in = gumbel_softmax(curr_pol_out, hard=True, cuda=(self.pol_dev == 'gpu'))
+            curr_pol_vf_in = gumbel_softmax(curr_pol_out, hard=True)
         else:
             curr_pol_out = curr_agent.policy(obs[agent_i])
             curr_pol_vf_in = curr_pol_out
