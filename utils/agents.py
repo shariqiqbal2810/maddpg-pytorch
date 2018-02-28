@@ -2,7 +2,7 @@ from torch import Tensor
 from torch.autograd import Variable
 from torch.optim import Adam
 from .networks import MLPNetwork
-from .misc import hard_update, gumbel_softmax
+from .misc import hard_update, gumbel_softmax, onehot_from_logits
 from .noise import OUNoise
 
 class DDPGAgent(object):
@@ -63,7 +63,10 @@ class DDPGAgent(object):
         """
         action = self.policy(obs)
         if self.discrete_action:
-            action = gumbel_softmax(action, hard=True)
+            if explore:
+                action = gumbel_softmax(action, hard=True)
+            else:
+                action = onehot_from_logits(action)
         else:  # continuous action
             if explore:
                 action += Variable(Tensor(self.exploration.noise()),
