@@ -90,3 +90,11 @@ def gumbel_softmax(logits, temperature=1.0, hard=False):
         y_hard = onehot_from_logits(y)
         y = (y_hard - y).detach() + y
     return y
+
+def disable_gradients(module):
+    for p in module.parameters():
+        p.requires_grad = False
+
+def enable_gradients(module):
+    for p in module.parameters():
+        p.requires_grad = True
