@@ -279,9 +279,11 @@ class MADDPG(object):
     def prep_training(self, device='gpu'):
         for a in self.agents:
             a.policy.train()
-            a.critic.train()
             a.target_policy.train()
-            a.target_critic.train()
+            # need bc sometimes we combine with other algs that don't have a separate critic per agent
+            if hasattr(a, 'critic'):
+                a.critic.train()
+                a.target_critic.train()
         if device == 'gpu':
             fn = lambda x: x.cuda()
         else:
