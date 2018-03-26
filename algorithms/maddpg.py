@@ -12,8 +12,8 @@ class MADDPG(object):
     Wrapper class for DDPG-esque (i.e. also MADDPG) agents in multi-agent task
     """
     def __init__(self, agent_init_params, alg_types, agent_types,
-                 gamma=0.95, tau=0.01, lr=0.01, hidden_dim=64,
-                 discrete_action=False, share=False):
+                 gamma=0.95, tau=0.01, lr=0.01, pol_hidden_dim=64,
+                 critic_hidden_dim=64, discrete_action=False, share=False):
         """
         Inputs:
             agent_init_params (list of dict): List of dicts with parameters to
@@ -41,10 +41,12 @@ class MADDPG(object):
                          if atype == 'adversary']
         if share:
             self.learners = [DDPGAgent(lr=lr, discrete_action=discrete_action,
-                                       hidden_dim=hidden_dim,
+                                       pol_hidden_dim=pol_hidden_dim,
+                                       critic_hidden_dim=critic_hidden_dim,
                                        **agent_init_params[self.good_inds[0]]),
                              DDPGAgent(lr=lr, discrete_action=discrete_action,
-                                       hidden_dim=hidden_dim,
+                                       pol_hidden_dim=pol_hidden_dim,
+                                       critic_hidden_dim=critic_hidden_dim,
                                        **agent_init_params[self.adv_inds[0]])]
             # make different class for each agent that shares networks and
             # optimizers, but has a unique noise process
@@ -54,7 +56,8 @@ class MADDPG(object):
                            for atype in agent_types]
         else:
             self.learners = [DDPGAgent(lr=lr, discrete_action=discrete_action,
-                                       hidden_dim=hidden_dim,
+                                       pol_hidden_dim=pol_hidden_dim,
+                                       critic_hidden_dim=critic_hidden_dim,
                                        **params)
                              for params in agent_init_params]
             self.agents = self.learners
@@ -329,8 +332,8 @@ class MADDPG(object):
 
     @classmethod
     def init_from_env(cls, env, good_alg="MADDPG", adversary_alg="MADDPG",
-                      gamma=0.95, tau=0.01, lr=0.01, hidden_dim=64,
-                      share=False):
+                      gamma=0.95, tau=0.01, lr=0.01, pol_hidden_dim=64,
+                      critic_hidden_dim=64, share=False):
         """
         Instantiate instance of this class from multi-agent environment
 
@@ -378,7 +381,8 @@ class MADDPG(object):
                                       'num_in_critic': num_in_critic,
                                       'onehot_dim': onehot_dim})
         init_dict = {'gamma': gamma, 'tau': tau, 'lr': lr,
-                     'hidden_dim': hidden_dim,
+                     'pol_hidden_dim': pol_hidden_dim,
+                     'critic_hidden_dim': critic_hidden_dim,
                      'alg_types': alg_types,
                      'agent_init_params': agent_init_params,
                      'discrete_action': discrete_action,
