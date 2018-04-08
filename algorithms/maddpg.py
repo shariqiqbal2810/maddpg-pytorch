@@ -333,7 +333,7 @@ class MADDPG(object):
     @classmethod
     def init_from_env(cls, env, good_alg="MADDPG", adversary_alg="MADDPG",
                       gamma=0.95, tau=0.01, lr=0.01, pol_hidden_dim=64,
-                      critic_hidden_dim=64, share=False):
+                      critic_hidden_dim=64, share=False, **kwargs):
         """
         Instantiate instance of this class from multi-agent environment
 
