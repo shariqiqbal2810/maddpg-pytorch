@@ -91,6 +91,15 @@ def gumbel_softmax(logits, temperature=1.0, hard=False):
         y = (y_hard - y).detach() + y
     return y
 
+def categorical_sample(probs, use_cuda=False):
+    int_acs = torch.multinomial(probs, 1)
+    if use_cuda:
+        tensor_type = torch.cuda.FloatTensor
+    else:
+        tensor_type = torch.FloatTensor
+    acs = Variable(tensor_type(*probs.shape).fill_(0)).scatter_(1, int_acs, 1)
+    return int_acs, acs
+
 def disable_gradients(module):
     for p in module.parameters():
         p.requires_grad = False
