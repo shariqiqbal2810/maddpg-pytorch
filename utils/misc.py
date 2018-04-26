@@ -107,3 +107,21 @@ def disable_gradients(module):
 def enable_gradients(module):
     for p in module.parameters():
         p.requires_grad = True
+
+def sep_clip_grad_norm(parameters, max_norm, norm_type=2):
+    """
+    Clips gradient norms calculated on a per-parameter basis, rather than over
+    the whole list of parameters as in torch.nn.utils.clip_grad_norm.
+    Code based on torch.nn.utils.clip_grad_norm
+    """
+    parameters = list(filter(lambda p: p.grad is not None, parameters))
+    max_norm = float(max_norm)
+    norm_type = float(norm_type)
+    for p in parameters:
+        if norm_type == float('inf'):
+            p_norm = p.grad.data.abs().max()
+        else:
+            p_norm = p.grad.data.norm(norm_type)
+        clip_coef = max_norm / (p_norm + 1e-6)
+        if clip_coef < 1:
+            p.grad.data.mul_(clip_coef)

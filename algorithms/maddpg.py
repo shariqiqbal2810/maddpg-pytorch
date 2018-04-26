@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from gym.spaces import Box, Discrete
 from ..utils.networks import MLPNetwork
-from ..utils.misc import soft_update, average_gradients, onehot_from_logits, gumbel_softmax, enable_gradients, disable_gradients
+from ..utils.misc import soft_update, average_gradients, onehot_from_logits, gumbel_softmax, enable_gradients, disable_gradients, sep_clip_grad_norm
 from ..utils.agents import DDPGAgent
 
 MSELoss = torch.nn.MSELoss()
@@ -204,7 +204,7 @@ class MADDPG(object):
         if (self.share and (agent_i == self.good_inds[-1] or
                             agent_i == self.adv_inds[-1])) or not self.share:
             # only update networks for last agent on team if sharing networks
-            torch.nn.utils.clip_grad_norm(curr_agent.critic.parameters(), 0.5)
+            sep_clip_grad_norm(curr_agent.critic.parameters(), 0.5)
             curr_agent.critic_optimizer.step()
             curr_agent.critic_optimizer.zero_grad()
 
@@ -259,7 +259,7 @@ class MADDPG(object):
         if (self.share and (agent_i == self.good_inds[-1] or
                             agent_i == self.adv_inds[-1])) or not self.share:
             # only update networks for last agent on team if sharing networks
-            torch.nn.utils.clip_grad_norm(curr_agent.policy.parameters(), 0.5)
+            sep_clip_grad_norm(curr_agent.policy.parameters(), 0.5)
             curr_agent.policy_optimizer.step()
             curr_agent.policy_optimizer.zero_grad()
 
