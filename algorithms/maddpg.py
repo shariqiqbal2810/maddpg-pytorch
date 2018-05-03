@@ -268,6 +268,93 @@ class MADDPG(object):
                                {'vf_loss': vf_loss,
                                 'pol_loss': pol_loss},
                                self.niter)
+        self.niter += 1
+
+    def update_critic(self, sample, logger=None, **kwargs):
+        """
+        Update all agents' critics
+        Inputs:
+            sample: tuple of (observations, actions, rewards, next
+                    observations, and episode end masks) sampled randomly from
+                    the replay buffer. Each is a list with entries
+                    corresponding to each agent
+            logger (SummaryWriter from Tensorboard-Pytorch):
+                If passed in, important quantities will be logged
+        """
+        obs, acs, rews, next_obs, dones = sample
+
+        if self.discrete_action: # one-hot encode action
+            all_trgt_acs = [onehot_from_logits(pi(nobs)) for pi, nobs in
+                            zip(self.target_policies, next_obs)]
+        else:
+            all_trgt_acs = [pi(nobs) for pi, nobs in zip(self.target_policies,
+                                                         next_obs)]
+        for a_i in range(self.nagents):
+            curr_agent = self.agents[a_i]
+            if self.alg_types[a_i] == 'MADDPG':
+                trgt_vf_in = torch.cat((*next_obs, *all_trgt_acs), dim=1)
+            else:  # DDPG
+                trgt_vf_in = torch.cat((next_obs[a_i], all_trgt_acs[a_i]),
+                                       dim=1)
+            target_value = (rews[a_i].view(-1, 1) + self.gamma *
+                            curr_agent.target_critic(trgt_vf_in) *
+                            (1 - dones[a_i].view(-1, 1)))
+
+            if self.alg_types[a_i] == 'MADDPG':
+                vf_in = torch.cat((*obs, *acs), dim=1)
+            else:  # DDPG
+                vf_in = torch.cat((obs[a_i], acs[a_i]), dim=1)
+            actual_value = curr_agent.critic(vf_in)
+            vf_loss = MSELoss(actual_value, target_value.detach())
+            vf_loss.backward()
+
+            sep_clip_grad_norm(curr_agent.critic.parameters(), 0.5)
+            curr_agent.critic_optimizer.step()
+            curr_agent.critic_optimizer.zero_grad()
+            if logger is not None:
+                logger.add_scalar('agent%i/losses/vf_loss' % a_i, vf_loss,
+                                   self.niter)
+        self.niter += 1
+
+    def update_policies(self, sample, logger=None, **kwargs):
+        """
+        Update all agents' policies
+        Inputs:
+            sample: tuple of (observations, actions, rewards, next
+                    observations, and episode end masks) sampled randomly from
+                    the replay buffer. Each is a list with entries
+                    corresponding to each agent
+            logger (SummaryWriter from Tensorboard-Pytorch):
+                If passed in, important quantities will be logged
+        """
+        obs, acs, rews, next_obs, dones = sample
+        all_pol_out = [pi(ob) for pi, ob in zip(self.policies, obs)]
+        if self.discrete_action:
+            all_pol_acs = [gumbel_softmax(out, hard=True)
+                           for out in all_pol_out]
+        else:
+            all_pol_acs = all_pol_out
+        for a_i in range(self.nagents):
+            curr_agent = self.agents[a_i]
+            if self.alg_types[a_i] == 'MADDPG':
+                detached_acs = [ac if i == a_i else ac.detach() for i, ac in enumerate(all_pol_acs)]
+                vf_in = torch.cat((*obs, *detached_acs), dim=1)
+            else:  # DDPG
+                vf_in = torch.cat((obs[a_i], all_pol_acs[a_i]), dim=1)
+            pol_loss = -curr_agent.critic(vf_in).mean()
+            pol_loss += (all_pol_out[a_i]**2).mean() * 1e-3  # policy regularization
+            # don't want critic to accumulate gradients from policy loss
+            disable_gradients(curr_agent.critic)
+            pol_loss.backward()
+            enable_gradients(curr_agent.critic)
+
+            sep_clip_grad_norm(curr_agent.policy.parameters(), 0.5)
+            curr_agent.policy_optimizer.step()
+            curr_agent.policy_optimizer.zero_grad()
+
+            if logger is not None:
+                logger.add_scalar('agent%i/losses/pol_loss' % a_i, pol_loss,
+                                   self.niter)
 
     def update_all_targets(self):
         """
@@ -277,7 +364,6 @@ class MADDPG(object):
         for l in self.learners:
             soft_update(l.target_critic, l.critic, self.tau)
             soft_update(l.target_policy, l.policy, self.tau)
-        self.niter += 1
 
     def prep_training(self, device='gpu'):
         for a in self.agents:
