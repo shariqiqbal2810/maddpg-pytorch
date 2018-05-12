@@ -45,13 +45,13 @@ def init_processes(rank, size, fn, backend='gloo'):
     dist.init_process_group(backend, rank=rank, world_size=size)
     fn(rank, size)
 
-def onehot_from_logits(logits, eps=0.0):
+def onehot_from_logits(logits, eps=0.0, dim=1):
     """
     Given batch of logits, return one-hot sample using epsilon greedy strategy
     (based on given epsilon)
     """
     # get best (according to current policy) actions in one-hot form
-    argmax_acs = (logits == logits.max(1, keepdim=True)[0]).float()
+    argmax_acs = (logits == logits.max(dim, keepdim=True)[0]).float()
     if eps == 0.0:
         return argmax_acs
     # get random actions in one-hot form
@@ -68,13 +68,13 @@ def sample_gumbel(shape, eps=1e-20, tens_type=torch.FloatTensor):
     return -torch.log(-torch.log(U + eps) + eps)
 
 # modified for PyTorch from https://github.com/ericjang/gumbel-softmax/blob/master/Categorical%20VAE.ipynb
-def gumbel_softmax_sample(logits, temperature):
+def gumbel_softmax_sample(logits, temperature, dim=1):
     """ Draw a sample from the Gumbel-Softmax distribution"""
     y = logits + sample_gumbel(logits.shape, tens_type=type(logits.data))
-    return F.softmax(y / temperature, dim=1)
+    return F.softmax(y / temperature, dim=dim)
 
 # modified for PyTorch from https://github.com/ericjang/gumbel-softmax/blob/master/Categorical%20VAE.ipynb
-def gumbel_softmax(logits, temperature=1.0, hard=False):
+def gumbel_softmax(logits, temperature=1.0, hard=False, dim=1):
     """Sample from the Gumbel-Softmax distribution and optionally discretize.
     Args:
       logits: [batch_size, n_class] unnormalized log-probs
@@ -85,11 +85,15 @@ def gumbel_softmax(logits, temperature=1.0, hard=False):
       If hard=True, then the returned sample will be one-hot, otherwise it will
       be a probabilitiy distribution that sums to 1 across classes
     """
-    y = gumbel_softmax_sample(logits, temperature)
+    y = gumbel_softmax_sample(logits, temperature, dim=dim)
     if hard:
-        y_hard = onehot_from_logits(y)
+        y_hard = onehot_from_logits(y, dim=dim)
         y = (y_hard - y).detach() + y
     return y
+
+def firmmax_sample(logits, temperature, dim=1):
+    y = logits + sample_gumbel(logits.shape, tens_type=type(logits.data)) / temperature
+    return F.softmax(y, dim=dim)
 
 def categorical_sample(probs, use_cuda=False):
     int_acs = torch.multinomial(probs, 1)
