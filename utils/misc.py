@@ -92,6 +92,8 @@ def gumbel_softmax(logits, temperature=1.0, hard=False, dim=1):
     return y
 
 def firmmax_sample(logits, temperature, dim=1):
+    if temperature == 0:
+        return F.softmax(logits, dim=dim)
     y = logits + sample_gumbel(logits.shape, tens_type=type(logits.data)) / temperature
     return F.softmax(y, dim=dim)
 

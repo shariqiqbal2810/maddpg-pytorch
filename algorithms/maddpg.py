@@ -337,8 +337,9 @@ class MADDPG(object):
         for a_i in range(self.nagents):
             curr_agent = self.agents[a_i]
             if self.alg_types[a_i] == 'MADDPG':
-                detached_acs = [ac if i == a_i else ac.detach() for i, ac in enumerate(all_pol_acs)]
-                vf_in = torch.cat((*obs, *detached_acs), dim=1)
+                inp_acs = [pol_ac if i == a_i else ac for i, (ac, pol_ac)
+                           in enumerate(zip(acs, all_pol_acs))]
+                vf_in = torch.cat((*obs, *inp_acs), dim=1)
             else:  # DDPG
                 vf_in = torch.cat((obs[a_i], all_pol_acs[a_i]), dim=1)
             pol_loss = -curr_agent.critic(vf_in).mean()
@@ -479,7 +480,7 @@ class MADDPG(object):
         return instance
 
     @classmethod
-    def init_from_save(cls, filename):
+    def init_from_save(cls, filename, **kwargs):
         """
         Instantiate instance of this class from file created by 'save' method
         """
