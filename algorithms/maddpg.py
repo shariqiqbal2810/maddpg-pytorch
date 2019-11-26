@@ -13,7 +13,7 @@ class MADDPG(object):
     """
     def __init__(self, agent_init_params, alg_types,
                  gamma=0.95, tau=0.01, lr=0.01, hidden_dim=64,
-                 discrete_action=False):
+                 discrete_action=False, K = 1):
         """
         Inputs:
             agent_init_params (list of dict): List of dicts with parameters to
@@ -67,7 +67,7 @@ class MADDPG(object):
         for a in self.agents:
             a.reset_noise()
 
-    def step(self, observations, explore=False):
+    def step(self, observations, explore=False, k = 0):
         """
         Take a step forward in environment with all agents
         Inputs:
@@ -76,10 +76,10 @@ class MADDPG(object):
         Outputs:
             actions: List of actions for each agent
         """
-        return [a.step(obs, explore=explore) for a, obs in zip(self.agents,
+        return [a.step(obs, explore=explore, k = k) for a, obs in zip(self.agents,
                                                                  observations)]
 
-    def update(self, sample, agent_i, parallel=False, logger=None):
+    def update(self, sample, agent_i, parallel=False, logger=None, k = 0):
         """
         Update parameters of agent model based on sample from replay buffer
         Inputs:
@@ -98,22 +98,22 @@ class MADDPG(object):
         curr_agent.critic_optimizer.zero_grad()
         if self.alg_types[agent_i] == 'MADDPG':
             if self.discrete_action: # one-hot encode action
-                all_trgt_acs = [onehot_from_logits(pi(nobs)) for pi, nobs in
+                all_trgt_acs = [onehot_from_logits(pi[k](nobs)) for pi, nobs in
                                 zip(self.target_policies, next_obs)]
             else:
-                all_trgt_acs = [pi(nobs) for pi, nobs in zip(self.target_policies,
+                all_trgt_acs = [pi[k](nobs) for pi, nobs in zip(self.target_policies,
                                                              next_obs)]
             trgt_vf_in = torch.cat((*next_obs, *all_trgt_acs), dim=1)
         else:  # DDPG
             if self.discrete_action:
                 trgt_vf_in = torch.cat((next_obs[agent_i],
                                         onehot_from_logits(
-                                            curr_agent.target_policy(
+                                            curr_agent.target_policy[k](
                                                 next_obs[agent_i]))),
                                        dim=1)
             else:
                 trgt_vf_in = torch.cat((next_obs[agent_i],
-                                        curr_agent.target_policy(next_obs[agent_i])),
+                                        curr_agent.target_policy[k](next_obs[agent_i])),
                                        dim=1)
         target_value = (rews[agent_i].view(-1, 1) + self.gamma *
                         curr_agent.target_critic(trgt_vf_in) *
@@ -139,10 +139,10 @@ class MADDPG(object):
             # through discrete categorical samples, but I'm not sure if that is
             # correct since it removes the assumption of a deterministic policy for
             # DDPG. Regardless, discrete policies don't seem to learn properly without it.
-            curr_pol_out = curr_agent.policy(obs[agent_i])
+            curr_pol_out = curr_agent.policy[k](obs[agent_i])
             curr_pol_vf_in = gumbel_softmax(curr_pol_out, hard=True)
         else:
-            curr_pol_out = curr_agent.policy(obs[agent_i])
+            curr_pol_out = curr_agent.policy[k](obs[agent_i])
             curr_pol_vf_in = curr_pol_out
         if self.alg_types[agent_i] == 'MADDPG':
             all_pol_acs = []
@@ -150,9 +150,9 @@ class MADDPG(object):
                 if i == agent_i:
                     all_pol_acs.append(curr_pol_vf_in)
                 elif self.discrete_action:
-                    all_pol_acs.append(onehot_from_logits(pi(ob)))
+                    all_pol_acs.append(onehot_from_logits(pi[k](ob)))
                 else:
-                    all_pol_acs.append(pi(ob))
+                    all_pol_acs.append(pi[k](ob))
             vf_in = torch.cat((*obs, *all_pol_acs), dim=1)
         else:  # DDPG
             vf_in = torch.cat((obs[agent_i], curr_pol_vf_in),
@@ -161,9 +161,9 @@ class MADDPG(object):
         pol_loss += (curr_pol_out**2).mean() * 1e-3
         pol_loss.backward()
         if parallel:
-            average_gradients(curr_agent.policy)
-        torch.nn.utils.clip_grad_norm(curr_agent.policy.parameters(), 0.5)
-        curr_agent.policy_optimizer.step()
+            average_gradients(curr_agent.policy[k])
+        torch.nn.utils.clip_grad_norm(curr_agent.policy[k].parameters(), 0.5)
+        curr_agent.policy_optimizer[k].step()
         if logger is not None:
             logger.add_scalars('agent%i/losses' % agent_i,
                                {'vf_loss': vf_loss,
@@ -177,14 +177,16 @@ class MADDPG(object):
         """
         for a in self.agents:
             soft_update(a.target_critic, a.critic, self.tau)
-            soft_update(a.target_policy, a.policy, self.tau)
+            for k in range(a.K):
+                soft_update(a.target_policy[k], a.policy[k], self.tau)
         self.niter += 1
 
     def prep_training(self, device='gpu'):
         for a in self.agents:
-            a.policy.train()
+            for k in range(a.K):
+                a.policy[k].train()
+                a.target_policy[k].train()
             a.critic.train()
-            a.target_policy.train()
             a.target_critic.train()
         if device == 'gpu':
             fn = lambda x: x.cuda()
@@ -192,7 +194,8 @@ class MADDPG(object):
             fn = lambda x: x.cpu()
         if not self.pol_dev == device:
             for a in self.agents:
-                a.policy = fn(a.policy)
+                for k in range(a.K):
+                    a.policy[k] = fn(a.policy[k])
             self.pol_dev = device
         if not self.critic_dev == device:
             for a in self.agents:
@@ -200,7 +203,8 @@ class MADDPG(object):
             self.critic_dev = device
         if not self.trgt_pol_dev == device:
             for a in self.agents:
-                a.target_policy = fn(a.target_policy)
+                for k in range(a.K):
+                    a.target_policy[k] = fn(a.target_policy[k])
             self.trgt_pol_dev = device
         if not self.trgt_critic_dev == device:
             for a in self.agents:
@@ -209,7 +213,8 @@ class MADDPG(object):
 
     def prep_rollouts(self, device='cpu'):
         for a in self.agents:
-            a.policy.eval()
+            for k in range(a.K):
+                a.policy[k].eval()
         if device == 'gpu':
             fn = lambda x: x.cuda()
         else:
@@ -217,7 +222,8 @@ class MADDPG(object):
         # only need main policy for rollouts
         if not self.pol_dev == device:
             for a in self.agents:
-                a.policy = fn(a.policy)
+                for k in range(a.K):
+                    a.policy[k] = fn(a.policy[k])
             self.pol_dev = device
 
     def save(self, filename):
@@ -231,7 +237,7 @@ class MADDPG(object):
 
     @classmethod
     def init_from_env(cls, env, agent_alg="MADDPG", adversary_alg="MADDPG",
-                      gamma=0.95, tau=0.01, lr=0.01, hidden_dim=64):
+                      gamma=0.95, tau=0.01, lr=0.01, hidden_dim=64, K = 1):
         """
         Instantiate instance of this class from multi-agent environment
         """
@@ -258,7 +264,8 @@ class MADDPG(object):
                 num_in_critic = obsp.shape[0] + get_shape(acsp)
             agent_init_params.append({'num_in_pol': num_in_pol,
                                       'num_out_pol': num_out_pol,
-                                      'num_in_critic': num_in_critic})
+                                      'num_in_critic': num_in_critic,
+                                      'K': K})
         init_dict = {'gamma': gamma, 'tau': tau, 'lr': lr,
                      'hidden_dim': hidden_dim,
                      'alg_types': alg_types,

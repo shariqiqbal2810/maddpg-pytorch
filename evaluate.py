@@ -7,6 +7,7 @@ from pathlib import Path
 from torch.autograd import Variable
 from utils.make_env import make_env
 from algorithms.maddpg import MADDPG
+import numpy as np
 
 
 def run(config):
@@ -34,6 +35,8 @@ def run(config):
             frames = []
             frames.append(env.render('rgb_array')[0])
         env.render('human')
+        # Pick a random subpolicy to execute in this episode
+        k = np.random.choice(maddpg.K)
         for t_i in range(config.episode_length):
             calc_start = time.time()
             # rearrange observations to be per agent, and convert to torch Variable
@@ -41,7 +44,7 @@ def run(config):
                                   requires_grad=False)
                          for i in range(maddpg.nagents)]
             # get actions as torch Variables
-            torch_actions = maddpg.step(torch_obs, explore=False)
+            torch_actions = maddpg.step(torch_obs, explore=False, k = k)
             # convert actions to numpy arrays
             actions = [ac.data.numpy().flatten() for ac in torch_actions]
             obs, rewards, dones, infos = env.step(actions)

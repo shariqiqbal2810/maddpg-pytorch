@@ -12,7 +12,7 @@ from utils.buffer import ReplayBuffer
 from utils.env_wrappers import SubprocVecEnv, DummyVecEnv
 from algorithms.maddpg import MADDPG
 
-USE_CUDA = False  # torch.cuda.is_available()
+USE_CUDA = torch.cuda.is_available()# False  #
 
 def make_parallel_env(env_id, n_rollout_threads, seed, discrete_action):
     def get_env_fn(rank):
@@ -54,11 +54,14 @@ def run(config):
                                   adversary_alg=config.adversary_alg,
                                   tau=config.tau,
                                   lr=config.lr,
-                                  hidden_dim=config.hidden_dim)
-    replay_buffer = ReplayBuffer(config.buffer_length, maddpg.nagents,
+                                  hidden_dim=config.hidden_dim,
+                                  K = config.n_ensemble)
+    replay_buffer = []
+    for k in range(config.n_ensemble):
+        replay_buffer.append(ReplayBuffer(config.buffer_length, maddpg.nagents,
                                  [obsp.shape[0] for obsp in env.observation_space],
                                  [acsp.shape[0] if isinstance(acsp, Box) else acsp.n
-                                  for acsp in env.action_space])
+                                  for acsp in env.action_space]))
     t = 0
     for ep_i in range(0, config.n_episodes, config.n_rollout_threads):
         print("Episodes %i-%i of %i" % (ep_i + 1,
@@ -71,23 +74,24 @@ def run(config):
         explr_pct_remaining = max(0, config.n_exploration_eps - ep_i) / config.n_exploration_eps
         maddpg.scale_noise(config.final_noise_scale + (config.init_noise_scale - config.final_noise_scale) * explr_pct_remaining)
         maddpg.reset_noise()
-
+        # Pick kth subpolicy to update in this episode.
+        k = np.random.choice(config.n_ensemble)
         for et_i in range(config.episode_length):
             # rearrange observations to be per agent, and convert to torch Variable
             torch_obs = [Variable(torch.Tensor(np.vstack(obs[:, i])),
                                   requires_grad=False)
                          for i in range(maddpg.nagents)]
             # get actions as torch Variables
-            torch_agent_actions = maddpg.step(torch_obs, explore=True)
+            torch_agent_actions = maddpg.step(torch_obs, explore=True, k=k)
             # convert actions to numpy arrays
             agent_actions = [ac.data.numpy() for ac in torch_agent_actions]
             # rearrange actions to be per environment
             actions = [[ac[i] for ac in agent_actions] for i in range(config.n_rollout_threads)]
             next_obs, rewards, dones, infos = env.step(actions)
-            replay_buffer.push(obs, agent_actions, rewards, next_obs, dones)
+            replay_buffer[k].push(obs, agent_actions, rewards, next_obs, dones)
             obs = next_obs
             t += config.n_rollout_threads
-            if (len(replay_buffer) >= config.batch_size and
+            if (len(replay_buffer[k]) >= config.batch_size and
                 (t % config.steps_per_update) < config.n_rollout_threads):
                 if USE_CUDA:
                     maddpg.prep_training(device='gpu')
@@ -95,12 +99,12 @@ def run(config):
                     maddpg.prep_training(device='cpu')
                 for u_i in range(config.n_rollout_threads):
                     for a_i in range(maddpg.nagents):
-                        sample = replay_buffer.sample(config.batch_size,
+                        sample = replay_buffer[k].sample(config.batch_size,
                                                       to_gpu=USE_CUDA)
-                        maddpg.update(sample, a_i, logger=logger)
+                        maddpg.update(sample, a_i, logger=logger, k = k)
                     maddpg.update_all_targets()
                 maddpg.prep_rollouts(device='cpu')
-        ep_rews = replay_buffer.get_average_rewards(
+        ep_rews = replay_buffer[k].get_average_rewards(
             config.episode_length * config.n_rollout_threads)
         for a_i, a_ep_rew in enumerate(ep_rews):
             logger.add_scalar('agent%i/mean_episode_rewards' % a_i, a_ep_rew, ep_i)
@@ -149,6 +153,7 @@ if __name__ == '__main__':
                         choices=['MADDPG', 'DDPG'])
     parser.add_argument("--discrete_action",
                         action='store_true')
+    parser.add_argument("--n_ensemble", default=int(1), type=int)
 
     config = parser.parse_args()
 
